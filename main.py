@@ -124,18 +124,30 @@ class LichessBot:
         if not handler.is_our_turn():
             return
 
-        # Pull our remaining clock (milliseconds) for time management.
+        # Pull our remaining clock and increment (milliseconds) for time mgmt.
         if handler.bot_color == chess.WHITE:
             remaining_ms = state.get("wtime")
+            increment_ms = state.get("winc")
         else:
             remaining_ms = state.get("btime")
+            increment_ms = state.get("binc")
         remaining_seconds = _ms_to_seconds(remaining_ms)
+        increment_seconds = _ms_to_seconds(increment_ms) or 0.0
 
-        move = handler.pick_move(remaining_seconds)
+        move = handler.pick_move(remaining_seconds, increment_seconds)
         if move is None:
             return
 
-        print(f"[{handler.game_id}] playing {move}")
+        info = getattr(handler, "last_info", None)
+        if info is not None:
+            print(
+                f"[{handler.game_id}] playing {move}  "
+                f"(depth {info.depth}, score {info.score}, "
+                f"{info.nodes} nodes, {info.elapsed:.2f}s)"
+            )
+        else:
+            print(f"[{handler.game_id}] playing {move}")
+
         try:
             self.client.bots.make_move(handler.game_id, move)
         except Exception as exc:  # noqa: BLE001

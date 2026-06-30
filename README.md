@@ -13,11 +13,17 @@ alpha-beta pruning and quiescence search**.
 - **Automatic challenge acceptance** (standard chess; variants are declined).
 - **Multi-game support** — each game runs in its own thread.
 - **Minimax search** with:
-  - Alpha-beta pruning
-  - Move ordering (captures first, via MVV-LVA, plus promotions/checks)
+  - **Iterative deepening** with a real wall-clock time budget (anytime search:
+    always has a move ready, goes deeper when time allows)
+  - Alpha-beta pruning + **Principal Variation Search (PVS)**
+  - **Transposition table** (Zobrist-hashed, mate-distance corrected)
+  - Move ordering: TT move → captures (MVV-LVA) → **killer moves** →
+    **history heuristic**
   - Quiescence search to avoid the horizon effect
-  - Material + piece-square-table evaluation
-  - Simple time management (depth chosen from the remaining clock)
+  - **Tapered evaluation**: material + piece-square tables, a king table that
+    blends middlegame → endgame, bishop-pair bonus, and a doubled-pawn penalty
+  - Time management: a fraction of the remaining clock (plus the increment),
+    spent via iterative deepening
 
 ## Project layout
 
@@ -99,11 +105,16 @@ You can also challenge it directly via URL:
 
 ## Tuning
 
-- **Strength vs. speed:** edit `choose_depth()` in [`bot.py`](bot.py) to raise
-  or lower the search depth for each time bucket. Higher depth = stronger but
-  slower.
-- **Evaluation:** adjust `PIECE_VALUES` or the piece-square tables in
+- **Strength vs. speed:** edit `choose_time_budget()` and `MAX_DEPTH` in
+  [`bot.py`](bot.py). A bigger time fraction / higher depth cap = stronger but
+  slower. The engine deepens until the time budget runs out, so more time
+  directly means more depth.
+- **Evaluation:** adjust `PIECE_VALUES`, the piece-square tables, or the
+  `BISHOP_PAIR_BONUS` / `DOUBLED_PAWN_PENALTY` constants in
   [`engine.py`](engine.py) to change playing style.
+- **Direct engine use:** `Engine().search(board, time_limit=5.0)` returns a
+  `SearchInfo(move, depth, score, nodes, elapsed)`. A fixed-depth
+  `engine.search(board, depth)` wrapper is also available for quick tests.
 
 ## Notes & limitations
 
