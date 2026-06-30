@@ -134,6 +134,15 @@ Free Polyglot books are widely available (e.g. search for "Polyglot opening
 book .bin"). With no book present the bot simply plays openings from search —
 the feature is entirely opt-in.
 
+## Tests
+
+A small `unittest` suite covers tactical correctness (mates, winning material),
+time-budget compliance, terminal handling, and the opening-book fallback:
+
+```bash
+python test_engine.py        # or:  python -m unittest
+```
+
 ## Notes & limitations
 
 - Only **standard chess** is supported; variant challenges are declined.
