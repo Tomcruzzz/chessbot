@@ -483,16 +483,46 @@ class Engine:
 
         best_score = -MATE_SCORE - 1
         best_move: chess.Move | None = None
-        first = True
+        move_count = 0
 
         for move in moves:
+            move_count += 1
+            is_quiet = not board.is_capture(move) and move.promotion is None
+            gives_check = board.gives_check(move)
             board.push(move)
-            if first:
+
+            if move_count == 1:
                 # Full-window search for the first (best-ordered) move.
                 score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
             else:
-                # PVS scout: try a null window first; re-search if it surprises.
-                score = -self._negamax(board, depth - 1, -alpha - 1, -alpha, ply + 1)
+                # --- Late Move Reductions. Moves ordered late are unlikely to
+                # be best, so search quiet ones at reduced depth first; only
+                # pay full depth if the reduced search proves them worthwhile.
+                # We never reduce captures/promotions, checking moves, replies
+                # to check, or the first few (best-ordered) moves.
+                reduction = 0
+                if (
+                    depth >= 3
+                    and move_count > 3
+                    and is_quiet
+                    and not in_check
+                    and not gives_check
+                ):
+                    reduction = 1 if move_count <= 6 else 2
+                    if reduction >= depth - 1:
+                        reduction = depth - 2
+
+                # PVS scout: null window, possibly reduced.
+                score = -self._negamax(
+                    board, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1
+                )
+                # A reduced search that beats alpha may have been pruned too
+                # aggressively — re-search at full depth (still null window).
+                if reduction and score > alpha:
+                    score = -self._negamax(
+                        board, depth - 1, -alpha - 1, -alpha, ply + 1
+                    )
+                # PVS: if it landed inside the window, re-search full window.
                 if alpha < score < beta:
                     score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
             board.pop()
@@ -505,11 +535,10 @@ class Engine:
             if alpha >= beta:
                 # Beta cutoff. Reward quiet moves that cause cutoffs so they
                 # are tried earlier next time (killer + history heuristics).
-                if not board.is_capture(move) and move.promotion is None:
+                if is_quiet:
                     self._record_killer(ply, move)
                     self.history[move.from_square][move.to_square] += depth * depth
                 break
-            first = False
 
         # --- Store in the transposition table. ---
         if best_score <= alpha_orig:

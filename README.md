@@ -16,8 +16,8 @@ alpha-beta pruning and quiescence search**.
   - **Iterative deepening** with a real wall-clock time budget (anytime search:
     always has a move ready, goes deeper when time allows)
   - Alpha-beta pruning + **Principal Variation Search (PVS)**
-  - **Null-move pruning** (disabled in check / likely zugzwang) and
-    **check extensions** for deeper tactical sight
+  - **Null-move pruning** (disabled in check / likely zugzwang),
+    **check extensions**, and **late move reductions (LMR)** for deeper search
   - **Transposition table** (Zobrist-hashed, mate-distance corrected)
   - Move ordering: TT move → captures (MVV-LVA) → **killer moves** →
     **history heuristic**
