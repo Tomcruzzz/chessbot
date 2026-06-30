@@ -26,6 +26,8 @@ Only depends on `python-chess`.
 
 from __future__ import annotations
 
+import os
+import random
 import time
 from typing import NamedTuple
 
@@ -291,7 +293,7 @@ class Engine:
     # wasteful; 2047 is a cheap power-of-two mask.
     _TIME_CHECK_MASK = 2047
 
-    def __init__(self) -> None:
+    def __init__(self, book_path: str | None = None) -> None:
         self.tt: dict[int, TTEntry] = {}
         # Two killer moves per ply (quiet moves that caused a cutoff).
         self.killers: list[list[chess.Move | None]] = [
@@ -301,6 +303,11 @@ class Engine:
         self.history: list[list[int]] = [[0] * 64 for _ in range(64)]
         self._deadline = 0.0
         self._nodes = 0
+        # Optional Polyglot opening book (.bin). If the file is missing or
+        # unreadable we silently fall back to pure search.
+        self.book_path = book_path
+        if book_path and os.path.isfile(book_path):
+            print(f"Using opening book: {book_path}")
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -318,9 +325,15 @@ class Engine:
         Returns a `SearchInfo`. The search operates on a copy of `board`, so
         the caller's board is never mutated.
         """
+        start = time.monotonic()
+
+        # --- Opening book: play a known move instantly if one exists. ---
+        book_move = self._probe_book(board)
+        if book_move is not None:
+            return SearchInfo(book_move, 0, 0, 0, time.monotonic() - start)
+
         board = board.copy(stack=False)
         self._nodes = 0
-        start = time.monotonic()
         self._deadline = start + time_limit if time_limit else float("inf")
 
         # Decay history between moves so old data doesn't dominate.
@@ -388,7 +401,13 @@ class Engine:
     # Negamax with alpha-beta, PVS, and the transposition table.
     # ------------------------------------------------------------------ #
     def _negamax(
-        self, board: chess.Board, depth: int, alpha: int, beta: int, ply: int
+        self,
+        board: chess.Board,
+        depth: int,
+        alpha: int,
+        beta: int,
+        ply: int,
+        allow_null: bool = True,
     ) -> int:
         # --- Clock check (cheap, periodic). ---
         self._nodes += 1
@@ -402,6 +421,13 @@ class Engine:
             return 0
         if board.halfmove_clock >= 100 or board.is_insufficient_material():
             return 0
+
+        # --- Check extension: searching one ply deeper when in check finds
+        # tactics that would otherwise fall off the horizon, and guarantees we
+        # never drop into quiescence (a static eval) while in check.
+        in_check = board.is_check()
+        if in_check:
+            depth += 1
 
         alpha_orig = alpha
         key = chess.polyglot.zobrist_hash(board)
@@ -425,6 +451,28 @@ class Engine:
         # --- Leaf: drop into quiescence search. ---
         if depth <= 0:
             return self._quiescence(board, alpha, beta, ply)
+
+        # --- Null-move pruning. If we let the opponent move twice in a row
+        # (we "pass") and our position is still good enough to cause a beta
+        # cutoff, the real position is almost certainly a cutoff too — so we
+        # skip it. Disabled when in check, in likely-zugzwang positions (no
+        # non-pawn material, where passing can be *good*), and near mate.
+        if (
+            allow_null
+            and not in_check
+            and depth >= 3
+            and beta < MATE_BOUND
+            and self._has_non_pawn_material(board)
+        ):
+            reduction = 2 + (depth >= 6)
+            board.push(chess.Move.null())
+            score = -self._negamax(
+                board, depth - 1 - reduction, -beta, -beta + 1, ply + 1,
+                allow_null=False,
+            )
+            board.pop()
+            if score >= beta:
+                return beta
 
         # --- Generate & order moves; detect terminal nodes. ---
         moves = self._order_moves(board, depth_ply=ply, tt_move=tt_move)
@@ -561,6 +609,33 @@ class Engine:
     def _tt_move(self, board: chess.Board) -> chess.Move | None:
         entry = self.tt.get(chess.polyglot.zobrist_hash(board))
         return entry.move if entry else None
+
+    def _probe_book(self, board: chess.Board) -> chess.Move | None:
+        """Return a weighted-random move from the opening book, or None.
+
+        The book is opened fresh each probe (cheap; avoids holding a file
+        handle open for the whole game). Any error -> no book move.
+        """
+        if not self.book_path or not os.path.isfile(self.book_path):
+            return None
+        try:
+            with chess.polyglot.open_reader(self.book_path) as reader:
+                entry = reader.weighted_choice(board, random=random.Random())
+                return entry.move
+        except (IndexError, KeyError, OSError, ValueError):
+            # IndexError/KeyError: position not in book. Others: bad file.
+            return None
+
+    @staticmethod
+    def _has_non_pawn_material(board: chess.Board) -> bool:
+        """True if the side to move has a piece other than pawns/king.
+
+        Used to disable null-move pruning in pawn/king endgames, where passing
+        the move can actually *help* (zugzwang) and would mislead the search.
+        """
+        side = board.occupied_co[board.turn]
+        pieces = board.knights | board.bishops | board.rooks | board.queens
+        return bool(side & pieces)
 
 
 # --------------------------------------------------------------------------- #

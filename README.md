@@ -16,10 +16,13 @@ alpha-beta pruning and quiescence search**.
   - **Iterative deepening** with a real wall-clock time budget (anytime search:
     always has a move ready, goes deeper when time allows)
   - Alpha-beta pruning + **Principal Variation Search (PVS)**
+  - **Null-move pruning** (disabled in check / likely zugzwang) and
+    **check extensions** for deeper tactical sight
   - **Transposition table** (Zobrist-hashed, mate-distance corrected)
   - Move ordering: TT move → captures (MVV-LVA) → **killer moves** →
     **history heuristic**
   - Quiescence search to avoid the horizon effect
+  - Optional **Polyglot opening book** (drop in a `book.bin`)
   - **Tapered evaluation**: material + piece-square tables, a king table that
     blends middlegame → endgame, bishop-pair bonus, and a doubled-pawn penalty
   - Time management: a fraction of the remaining clock (plus the increment),
@@ -115,6 +118,21 @@ You can also challenge it directly via URL:
 - **Direct engine use:** `Engine().search(board, time_limit=5.0)` returns a
   `SearchInfo(move, depth, score, nodes, elapsed)`. A fixed-depth
   `engine.search(board, depth)` wrapper is also available for quick tests.
+
+### Opening book (optional)
+
+The engine can play opening moves instantly from a [Polyglot](
+https://python-chess.readthedocs.io/en/latest/polyglot.html) `.bin` book
+instead of searching. To enable it, place a `book.bin` file next to the code
+(or point `BOOK_PATH` at one):
+
+```bash
+export BOOK_PATH=/path/to/your/book.bin   # Windows: set BOOK_PATH=...
+```
+
+Free Polyglot books are widely available (e.g. search for "Polyglot opening
+book .bin"). With no book present the bot simply plays openings from search —
+the feature is entirely opt-in.
 
 ## Notes & limitations
 

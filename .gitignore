@@ -1,6 +1,9 @@
 # Secrets — never commit the real token
 .env
 
+# Opening book (user-supplied binary, can be large)
+book.bin
+
 # Python
 __pycache__/
 *.py[cod]

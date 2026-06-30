@@ -14,12 +14,22 @@ A `GameHandler` instance is created per game by `main.py`.
 
 from __future__ import annotations
 
+import os
+
 import chess
 
 import engine
 
 # Hard cap on search depth regardless of time, to bound worst-case move time.
 MAX_DEPTH = 20
+
+# Optional Polyglot opening book. Drop a `book.bin` next to this file (or set
+# the BOOK_PATH env var) and the engine will use it for opening moves. If it's
+# absent the bot plays openings from search, so this is purely opt-in.
+BOOK_PATH = os.environ.get(
+    "BOOK_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "book.bin"),
+)
 
 # Never spend more than this fraction of the remaining clock on one move, and
 # never less than a small floor so we still search something when very low.
@@ -59,7 +69,7 @@ class GameHandler:
         self.bot_color = bot_color  # chess.WHITE or chess.BLACK
         self.board = chess.Board()
         # One engine for the whole game: its TT/history warm up over time.
-        self.engine = engine.Engine()
+        self.engine = engine.Engine(book_path=BOOK_PATH)
 
     def set_position(self, moves_str: str) -> None:
         """Rebuild the board from the space-separated UCI move list Lichess
